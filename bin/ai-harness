@@ -1,0 +1,171 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+# Template root: clone location by default, or override if the binary lives elsewhere.
+if [[ -n "${AI_DEV_HARNESS_ROOT:-}" ]]; then
+  HARNESS_ROOT="${AI_DEV_HARNESS_ROOT%/}"
+else
+  _SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  HARNESS_ROOT="$(cd "$_SCRIPT_DIR/.." && pwd)"
+fi
+
+COMMAND="${1:-}"
+ARG="${2:-}"
+
+function ensure_harness_root() {
+  if [ ! -d "$HARNESS_ROOT/templates/ai-harness" ]; then
+    echo "Error: could not find templates/ai-harness under HARNESS_ROOT: $HARNESS_ROOT" >&2
+    echo "Set AI_DEV_HARNESS_ROOT to the cloned ai-dev-harness repository if needed." >&2
+    exit 1
+  fi
+}
+
+function append_gitignore_harness() {
+  local gi=".gitignore"
+  touch "$gi"
+  local mark="# AI Dev Harness (local consultant tooling - do not commit)"
+  if ! grep -Fxq "$mark" "$gi" 2>/dev/null; then
+    echo "" >> "$gi"
+    echo "$mark" >> "$gi"
+  fi
+  grep -Fxq "/.ai-harness/" "$gi" 2>/dev/null || echo "/.ai-harness/" >> "$gi"
+  grep -Fxq ".cursor/rules/ai-dev-harness.mdc" "$gi" 2>/dev/null || echo ".cursor/rules/ai-dev-harness.mdc" >> "$gi"
+  grep -Fxq ".cursor/rules/architecture-rules.mdc" "$gi" 2>/dev/null || echo ".cursor/rules/architecture-rules.mdc" >> "$gi"
+}
+
+function init_harness() {
+  ensure_harness_root
+
+  echo "Initializing AI Dev Harness..."
+
+  if [ -d .ai-harness ]; then
+    if [ "$ARG" != "--force" ]; then
+      echo "Error: .ai-harness/ already exists." >&2
+      echo "Re-run with 'ai-harness init --force' to replace it with a fresh template copy." >&2
+      echo "Warning: --force removes local harness state, docs, runtime notes, and architecture files." >&2
+      exit 1
+    fi
+    echo "Warning: replacing existing .ai-harness/ with a fresh copy from templates."
+    rm -rf .ai-harness
+  fi
+  mkdir -p .ai-harness
+  cp -R "$HARNESS_ROOT/templates/ai-harness/." .ai-harness/
+  mkdir -p .ai-harness/runtime
+  mkdir -p .ai-harness/architecture
+
+  mkdir -p .cursor/rules
+  local here
+  here="$(pwd)"
+  if [ -e "$here/.cursor/rules/ai-dev-harness.mdc" ] && [ ! -L "$here/.cursor/rules/ai-dev-harness.mdc" ]; then
+    echo "Warning: .cursor/rules/ai-dev-harness.mdc exists and is not a symlink; leaving it unchanged."
+    echo "         Point it at .ai-harness/cursor-rule.mdc or remove the file and re-run init."
+  else
+    rm -f "$here/.cursor/rules/ai-dev-harness.mdc"
+    ln -sf ../../.ai-harness/cursor-rule.mdc "$here/.cursor/rules/ai-dev-harness.mdc"
+  fi
+
+  if [ -e "$here/.cursor/rules/architecture-rules.mdc" ] && [ ! -L "$here/.cursor/rules/architecture-rules.mdc" ]; then
+    echo "Warning: .cursor/rules/architecture-rules.mdc exists and is not a symlink; leaving it unchanged."
+    echo "         For consultant-local rules, remove it and re-run init, or symlink to .ai-harness/architecture-rules.mdc"
+  else
+    rm -f "$here/.cursor/rules/architecture-rules.mdc"
+    ln -sf ../../.ai-harness/architecture-rules.mdc "$here/.cursor/rules/architecture-rules.mdc"
+  fi
+
+  mkdir -p specs
+  if [ -d "$HARNESS_ROOT/templates/specs" ]; then
+    cp -R "$HARNESS_ROOT/templates/specs/." specs/
+  fi
+
+  append_gitignore_harness
+
+  echo "AI Dev Harness initialized."
+  echo ""
+  echo "Harness + local architecture pack: .ai-harness/ (gitignored by init)"
+  echo "Cursor symlinks:"
+  echo "  .cursor/rules/ai-dev-harness.mdc   -> .ai-harness/cursor-rule.mdc"
+  echo "  .cursor/rules/architecture-rules.mdc -> .ai-harness/architecture-rules.mdc"
+  echo "Deep-dive arch markdown: .ai-harness/architecture/"
+  echo "Harness input docs (local): .ai-harness/docs/00-project-context|10-feature-requests|20-change-requests/"
+  echo ""
+  echo "Next steps:"
+  echo ""
+  echo "1. Add project context docs to:"
+  echo "   .ai-harness/docs/00-project-context/"
+  echo ""
+  echo "2. Add feature requests to:"
+  echo "   .ai-harness/docs/10-feature-requests/"
+  echo ""
+  echo "3. Open Cursor Agent and run:"
+  echo ""
+  echo "   Read and execute .ai-harness/prompts/run-autonomous-cycle.md"
+}
+
+function status_harness() {
+  ensure_harness_root
+
+  if [ ! -f .ai-harness/state/project-state.json ]; then
+    echo "Harness not initialized (.ai-harness/state/project-state.json missing)."
+    exit 1
+  fi
+
+  cat .ai-harness/state/project-state.json
+}
+
+function doctor_harness() {
+  ensure_harness_root
+
+  local failed=0
+  local required_paths=(
+    "$HARNESS_ROOT/bin/ai-harness"
+    "$HARNESS_ROOT/scripts/install.sh"
+    "$HARNESS_ROOT/templates/ai-harness/cursor-rule.mdc"
+    "$HARNESS_ROOT/templates/ai-harness/architecture-rules.mdc"
+    "$HARNESS_ROOT/templates/ai-harness/prompts/run-autonomous-cycle.md"
+    "$HARNESS_ROOT/templates/ai-harness/state/project-state.json"
+    "$HARNESS_ROOT/templates/ai-harness/state/spec-queue.json"
+    "$HARNESS_ROOT/templates/specs"
+  )
+
+  for path in "${required_paths[@]}"; do
+    if [ ! -e "$path" ]; then
+      echo "Missing: $path" >&2
+      failed=1
+    fi
+  done
+
+  if [ "$failed" -ne 0 ]; then
+    echo "AI Dev Harness doctor failed." >&2
+    exit 1
+  fi
+
+  echo "AI Dev Harness doctor passed."
+}
+
+case "$COMMAND" in
+  init)
+    init_harness
+    ;;
+  status)
+    status_harness
+    ;;
+  doctor)
+    doctor_harness
+    ;;
+  -h|--help|help|"")
+    echo "Usage:"
+    echo "  ai-harness init [--force]"
+    echo "  ai-harness status"
+    echo "  ai-harness doctor"
+    ;;
+  *)
+    echo "Unknown command: $COMMAND" >&2
+    echo "" >&2
+    echo "Usage:"
+    echo "  ai-harness init [--force]"
+    echo "  ai-harness status"
+    echo "  ai-harness doctor"
+    exit 1
+    ;;
+esac

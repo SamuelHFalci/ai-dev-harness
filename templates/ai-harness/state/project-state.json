@@ -1,0 +1,17 @@
+{
+  "project_name": "CHANGE_ME",
+  "mode": "existing_project",
+  "current_stage": "INIT",
+  "current_spec": null,
+  "docs_version": 1,
+  "last_doc_sync": null,
+  "pending_change_requests": [],
+  "completed_specs": [],
+  "adopted_existing_specs": [],
+  "failed_specs": [],
+  "blocked": false,
+  "block_reason": null,
+  "architecture_bootstrap_done": false,
+  "architecture_review_required": true,
+  "next_action": "ADOPT_OR_DISCOVER"
+}

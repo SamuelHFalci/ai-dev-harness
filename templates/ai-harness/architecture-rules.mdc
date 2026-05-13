@@ -1,0 +1,17 @@
+---
+description: Project architecture (local consultant copy — not committed)
+globs: []
+alwaysApply: true
+---
+
+<!-- ai-harness:architecture-rules-stub — replace via Architecture Bootstrap or paste your full rules here -->
+
+# Project architecture
+
+This file lives under **`.ai-harness/architecture-rules.mdc`**.  
+`.cursor/rules/architecture-rules.mdc` should be a **symlink** created by `ai-harness init` so Cursor loads it, while **Git ignores** `.ai-harness/` and the symlink path.
+
+Deep-dive markdown belongs in **`.ai-harness/architecture/`** (e.g. `ARCHITECTURE-OVERVIEW.md`).  
+Update this `.mdc` with your **decision tree** (`IF` / `READ`) pointing at those paths using the **`.ai-harness/architecture/...`** prefix.
+
+Until you bootstrap or paste real content, the autonomous runner may stop for architecture review.

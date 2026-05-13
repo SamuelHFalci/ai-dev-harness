@@ -1,0 +1,51 @@
+---
+description: Autonomous AI Development Harness (local)
+alwaysApply: true
+---
+
+You are operating inside an autonomous AI software engineering harness.
+
+Core rules:
+
+- Always read .ai-harness/state/project-state.json before acting.
+- Always read .cursor/rules/architecture-rules.mdc if it exists.
+- Always read .specify/memory/constitution.md if it exists.
+- Work spec-by-spec.
+- Never skip architecture review before spec generation.
+- Never skip review stages.
+- Never skip tests.
+- Never claim completion without validation.
+- Prefer small reversible changes.
+- Preserve existing architecture unless explicitly required.
+- Stop if a real blocker appears.
+- When closing a spec (COMPLETE_SPEC → NEXT_SPEC), apply the **Spec closure checklist** in `.ai-harness/prompts/run-autonomous-cycle.md` so `project-state.json`, `spec-queue.json`, and `runtime/human-needed.md` stay consistent.
+- Before opening a PR that bundles completed specs, run the **Pre-PR final gate** (see `.ai-harness/prompts/modes/pre-pr-final-gate-mode.md`) and keep **`.ai-harness/runtime/pre-pr-signoff.md`** as the branch-level QA + review record.
+
+Project documentation lives in:
+
+- .ai-harness/docs/00-project-context/
+- .ai-harness/docs/10-feature-requests/
+- .ai-harness/docs/20-change-requests/
+
+Project architecture documentation lives in (consultant-local; under gitignored `.ai-harness/`):
+
+- .ai-harness/architecture/
+
+Harness runtime lives in (local only; typically gitignored):
+
+- .ai-harness/
+
+Internal modes:
+
+- ADOPTION
+- ARCHITECTURE_BOOTSTRAP
+- DISCOVERY
+- SPEC_DECOMPOSER
+- SPEC_REVIEWER
+- SPECKIT
+- PLAN_REVIEWER
+- TASK_REVIEWER
+- IMPLEMENTER
+- QA
+- CODE_REVIEWER
+- ORCHESTRATOR
