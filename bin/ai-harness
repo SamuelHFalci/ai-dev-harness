@@ -11,7 +11,6 @@ else
 fi
 
 COMMAND="${1:-}"
-ARG="${2:-}"
 
 function ensure_harness_root() {
   if [ ! -d "$HARNESS_ROOT/templates/ai-harness" ]; then
@@ -35,14 +34,17 @@ function append_gitignore_harness() {
 }
 
 function init_harness() {
+  local PROFILE="${1:-application}"
+  local FORCE="${2:-false}"
+
   ensure_harness_root
 
-  echo "Initializing AI Dev Harness..."
+  echo "Initializing AI Dev Harness (profile: ${PROFILE})..."
 
   if [ -d .ai-harness ]; then
-    if [ "$ARG" != "--force" ]; then
+    if [ "$FORCE" != "true" ]; then
       echo "Error: .ai-harness/ already exists." >&2
-      echo "Re-run with 'ai-harness init --force' to replace it with a fresh template copy." >&2
+      echo "Re-run with 'ai-harness init ... --force' to replace it with a fresh template copy." >&2
       echo "Warning: --force removes local harness state, docs, runtime notes, and architecture files." >&2
       exit 1
     fi
@@ -53,6 +55,14 @@ function init_harness() {
   cp -R "$HARNESS_ROOT/templates/ai-harness/." .ai-harness/
   mkdir -p .ai-harness/runtime
   mkdir -p .ai-harness/architecture
+
+  printf '%s\n' "$PROFILE" > .ai-harness/profile
+
+  if [ "$PROFILE" = "devops" ]; then
+    mkdir -p .ai-harness/prompts .ai-harness/docs
+    cp "$HARNESS_ROOT/templates/profiles/devops/prompts/run-devops-cycle.md" .ai-harness/prompts/
+    cp "$HARNESS_ROOT/templates/profiles/devops/docs/DEVOPS-WORKFLOW.md" .ai-harness/docs/
+  fi
 
   mkdir -p .cursor/rules
   local here
@@ -99,7 +109,13 @@ function init_harness() {
   echo ""
   echo "3. Open Cursor Agent and run:"
   echo ""
-  echo "   Read and execute .ai-harness/prompts/run-autonomous-cycle.md"
+  if [ "$PROFILE" = "devops" ]; then
+    echo "   Read and execute .ai-harness/prompts/run-devops-cycle.md"
+    echo ""
+    echo "   (See .ai-harness/docs/DEVOPS-WORKFLOW.md for how this profile maps specs to IaC.)"
+  else
+    echo "   Read and execute .ai-harness/prompts/run-autonomous-cycle.md"
+  fi
 }
 
 function status_harness() {
@@ -126,6 +142,8 @@ function doctor_harness() {
     "$HARNESS_ROOT/templates/ai-harness/state/project-state.json"
     "$HARNESS_ROOT/templates/ai-harness/state/spec-queue.json"
     "$HARNESS_ROOT/templates/specs"
+    "$HARNESS_ROOT/templates/profiles/devops/prompts/run-devops-cycle.md"
+    "$HARNESS_ROOT/templates/profiles/devops/docs/DEVOPS-WORKFLOW.md"
   )
 
   for path in "${required_paths[@]}"; do
@@ -145,7 +163,29 @@ function doctor_harness() {
 
 case "$COMMAND" in
   init)
-    init_harness
+    shift || true
+    PROFILE="application"
+    FORCE="false"
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        --force)
+          FORCE="true"
+          ;;
+        devops)
+          PROFILE="devops"
+          ;;
+        app|application)
+          PROFILE="application"
+          ;;
+        *)
+          echo "Unknown init option: $1" >&2
+          echo "Usage: ai-harness init [application|devops] [--force]" >&2
+          exit 1
+          ;;
+      esac
+      shift
+    done
+    init_harness "$PROFILE" "$FORCE"
     ;;
   status)
     status_harness
@@ -155,7 +195,7 @@ case "$COMMAND" in
     ;;
   -h|--help|help|"")
     echo "Usage:"
-    echo "  ai-harness init [--force]"
+    echo "  ai-harness init [application|devops] [--force]"
     echo "  ai-harness status"
     echo "  ai-harness doctor"
     ;;
@@ -163,7 +203,7 @@ case "$COMMAND" in
     echo "Unknown command: $COMMAND" >&2
     echo "" >&2
     echo "Usage:"
-    echo "  ai-harness init [--force]"
+    echo "  ai-harness init [application|devops] [--force]"
     echo "  ai-harness status"
     echo "  ai-harness doctor"
     exit 1

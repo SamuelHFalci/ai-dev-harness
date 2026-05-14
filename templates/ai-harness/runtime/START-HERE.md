@@ -11,6 +11,10 @@ Put decision-tree markdown in **`.ai-harness/architecture/`**.
 Harness **inputs** (context, requests, changes) go under **`.ai-harness/docs/...`** (see below).  
 **`specs/`** at the repo root is usually the client-visible Spec Kit tree; you may also keep a separate **`docs/`** folder for client-approved infra guides (Azure, etc.).
 
+### Profile (`application` vs `devops`)
+
+File **`.ai-harness/profile`** is written by `ai-harness init`. When it contains **`devops`**, use **`.ai-harness/prompts/run-devops-cycle.md`** as the main loop and read **`.ai-harness/docs/DEVOPS-WORKFLOW.md`** for how specs and QA map to IaC and pipelines. Otherwise use **`run-autonomous-cycle.md`**.
+
 ## 1. Add stable project context
 
 Put long-lived project documentation into:
@@ -52,9 +56,17 @@ Examples:
 
 ## 4. Open Cursor Agent
 
-Run:
+Run one of:
 
+```text
 Read and execute .ai-harness/prompts/run-autonomous-cycle.md
+```
+
+```text
+Read and execute .ai-harness/prompts/run-devops-cycle.md
+```
+
+Use the **devops** line only when `.ai-harness/profile` is `devops` (see section above).
 
 Recommended first run:
 

@@ -8,6 +8,7 @@ You are operating inside an autonomous AI software engineering harness.
 Core rules:
 
 - Always read .ai-harness/state/project-state.json before acting.
+- If `.ai-harness/profile` exists and its first non-empty line is `devops`, treat **`.ai-harness/prompts/run-devops-cycle.md`** as the primary autonomous runner; otherwise use **`.ai-harness/prompts/run-autonomous-cycle.md`**.
 - Always read .cursor/rules/architecture-rules.mdc if it exists.
 - Always read .specify/memory/constitution.md if it exists.
 - Work spec-by-spec.
@@ -18,7 +19,7 @@ Core rules:
 - Prefer small reversible changes.
 - Preserve existing architecture unless explicitly required.
 - Stop if a real blocker appears.
-- When closing a spec (COMPLETE_SPEC → NEXT_SPEC), apply the **Spec closure checklist** in `.ai-harness/prompts/run-autonomous-cycle.md` so `project-state.json`, `spec-queue.json`, and `runtime/human-needed.md` stay consistent.
+- When closing a spec (COMPLETE_SPEC → NEXT_SPEC), apply the **Spec closure checklist** in the active runner (`.ai-harness/prompts/run-autonomous-cycle.md` or `.ai-harness/prompts/run-devops-cycle.md`, per profile) so `project-state.json`, `spec-queue.json`, and `runtime/human-needed.md` stay consistent.
 - Before opening a PR that bundles completed specs, run the **Pre-PR final gate** (see `.ai-harness/prompts/modes/pre-pr-final-gate-mode.md`) and keep **`.ai-harness/runtime/pre-pr-signoff.md`** as the branch-level QA + review record.
 
 Project documentation lives in:

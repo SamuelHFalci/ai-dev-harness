@@ -23,22 +23,34 @@ Inside any project:
 ai-harness init
 ```
 
+For **DevOps / IaC** repos (Terraform, pipelines, platforms), use the same command with profile **`devops`** (adds `run-devops-cycle.md` and a short workflow guide):
+
+```bash
+ai-harness init devops
+```
+
 This creates **`.ai-harness/`** (prompts, state, protocols, local Cursor rule source) and a symlink **`.cursor/rules/ai-dev-harness.mdc`** → `.ai-harness/cursor-rule.mdc`.  
-`init` appends **`/.ai-harness/`** and the symlink path to **`.gitignore`** so harness tooling stays off the client remote if you prefer.
+`init` writes **`.ai-harness/profile`** (`application` or `devops`) and appends **`/.ai-harness/`** and the symlink path to **`.gitignore`** so harness tooling stays off the client remote if you prefer.
 
 If `.ai-harness/` already exists, `init` stops to protect local state. To intentionally replace it:
 
 ```bash
-ai-harness init --force
+ai-harness init devops --force
 ```
 
 **Spec Kit** output (`specs/` at repo root) usually stays a normal path for the client. **Everything the harness reads first** — context, feature requests, change requests, architecture rules, arch markdown — lives under **`.ai-harness/`** (e.g. `.ai-harness/docs/00-project-context/`, `.ai-harness/architecture-rules.mdc`, `.ai-harness/architecture/`) so it can stay **off the client’s Git**; Cursor still loads rules via **symlinks** under `.cursor/rules/` (gitignored by `init`). You may keep a separate repo `docs/` for client-approved infra guides (Azure, etc.) if you want those committed.
 
-Then open Cursor Agent and run:
+Then open Cursor Agent and run one of:
 
 ```text
 Read and execute .ai-harness/prompts/run-autonomous-cycle.md
 ```
+
+```text
+Read and execute .ai-harness/prompts/run-devops-cycle.md
+```
+
+Use **`run-devops-cycle.md`** when `.ai-harness/profile` contains **`devops`** (after `ai-harness init devops`). Otherwise use **`run-autonomous-cycle.md`**.
 
 ## Migrating from older layouts (`harness/` + `harness.mdc`)
 
