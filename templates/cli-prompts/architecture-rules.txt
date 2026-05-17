@@ -1,0 +1,24 @@
+Read and execute .ai-harness/prompts/modes/architecture-bootstrap-mode.md
+
+Inputs to use as ground truth (read all that exist):
+- .ai-harness/docs/00-project-context/
+- .ai-harness/docs/10-feature-requests/
+- .ai-harness/docs/20-change-requests/
+- .specify/memory/constitution.md
+- Any existing code, IaC, pipelines, or repo layout (if the repo is not empty)
+
+Task:
+- Replace or create .ai-harness/architecture-rules.mdc because it still contains the stub marker "ai-harness:architecture-rules-stub" OR is still generic.
+- Include YAML frontmatter, principles, structure, progressive loading, a real IF/READ decision tree pointing at .ai-harness/architecture/*.md, pattern anchors only if you can name real files in this repo, implementation safety rules, and testing/quality gates appropriate to this project.
+- Create at minimum:
+  - .ai-harness/architecture/ARCHITECTURE-OVERVIEW.md
+  - .ai-harness/architecture/TESTING.md
+  - .ai-harness/architecture/CODE-QUALITY.md
+- Ensure .cursor/rules/architecture-rules.mdc symlinks to .ai-harness/architecture-rules.mdc (fix if broken).
+- Update .ai-harness/state/project-state.json as the mode describes.
+- Append a short note to .ai-harness/state/run-log.md.
+- Create .ai-harness/runtime/human-needed.md asking for my review before any spec generation.
+
+If the repo is greenfield (little or no implementation yet): mark unknowns as provisional and tie decisions to the docs and constitution.
+
+Stop after bootstrap; do not start spec decomposition yet.

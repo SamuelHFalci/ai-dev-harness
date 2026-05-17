@@ -1,0 +1,17 @@
+Read and execute .ai-harness/prompts/modes/spec-decomposer-mode.md
+
+Before decomposing, read for context:
+- .ai-harness/state/project-state.json
+- .cursor/rules/architecture-rules.mdc (follow its decision tree if present)
+- .specify/memory/constitution.md (if it exists)
+- .ai-harness/docs/00-project-context/
+- .ai-harness/docs/10-feature-requests/
+- .ai-harness/docs/20-change-requests/
+- .ai-harness/runtime/discovery-report.md (if it exists; if missing, infer from the docs above and note assumptions in spec-list.md)
+
+Task:
+- Produce .ai-harness/runtime/spec-list.md with proposed spec IDs, titles, scope boundaries, dependencies, acceptance criteria at a high level, and suggested order.
+- Update .ai-harness/state/spec-queue.json (queue, in_progress, done, blocked) consistent with the list and with any existing work already tracked in project-state.json.
+- Respect architecture-rules.mdc and the constitution. Prefer small, independently testable specs; no rewriting of completed specs; amendments only where behavior already shipped.
+
+Stop after writing spec-list.md and spec-queue.json; do not create specs/ tree files yet unless the mode explicitly requires it.
