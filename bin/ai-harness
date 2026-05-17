@@ -145,14 +145,29 @@ function upgrade_harness() {
     exit 1
   fi
 
-  local UPDATE_CURSOR="${1:-false}"
+  local UPDATE_CURSOR="false"
+  local SKIP_MODES="false"
+
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --update-cursor-rule) UPDATE_CURSOR="true" ;;
+      --skip-modes)         SKIP_MODES="true" ;;
+      *)
+        echo "Unknown upgrade option: $1" >&2
+        echo "Usage: ai-harness upgrade [--update-cursor-rule] [--skip-modes]" >&2
+        exit 1
+        ;;
+    esac
+    shift
+  done
+
   local copied=0
   local skipped=0
 
-  echo "Upgrading AI Dev Harness (non-destructive — user data untouched)..."
+  echo "Upgrading AI Dev Harness..."
   echo ""
 
-  # New prompt files — copy only if missing
+  # ── 1. New runner prompts — add only if missing ──────────────────────────
   local new_prompts=(
     "prompts/run-autonomous-cycle-lite.md"
     "prompts/run-autonomous-cycle-deep.md"
@@ -172,12 +187,12 @@ function upgrade_harness() {
     fi
   done
 
-  # context-index.md — always refresh (it's a map, not user data)
+  # ── 2. context-index.md — always refresh (map file, not user data) ────────
   cp "$HARNESS_ROOT/templates/ai-harness/context-index.md" ".ai-harness/context-index.md"
   echo "  updated: .ai-harness/context-index.md"
   copied=$((copied + 1))
 
-  # New state files — copy only if missing (never overwrite live state)
+  # ── 3. New state files — add only if missing (never overwrite live state) ─
   local new_state=(
     "state/current-task.md"
     "state/context-cache.md"
@@ -194,39 +209,79 @@ function upgrade_harness() {
     fi
   done
 
-  # Examples directory — always refresh (reference files, not user data)
+  # ── 4. Mode files — always update (template content, not user data) ───────
+  local mode_files=(
+    "prompts/modes/adoption-mode.md"
+    "prompts/modes/discovery-mode.md"
+    "prompts/modes/spec-reviewer-mode.md"
+    "prompts/modes/speckit-mode.md"
+    "prompts/modes/plan-reviewer-mode.md"
+    "prompts/modes/task-reviewer-mode.md"
+    "prompts/modes/implementer-mode.md"
+    "prompts/modes/qa-mode.md"
+    "prompts/modes/code-review-mode.md"
+  )
+  if [ "$SKIP_MODES" = "false" ]; then
+    for f in "${mode_files[@]}"; do
+      cp "$HARNESS_ROOT/templates/ai-harness/$f" ".ai-harness/$f"
+      echo "  updated: .ai-harness/$f"
+      copied=$((copied + 1))
+    done
+  else
+    echo "  skipped: prompts/modes/ (--skip-modes set)"
+    skipped=$((skipped + ${#mode_files[@]}))
+  fi
+
+  # ── 5. Examples — always refresh (reference files, not user data) ─────────
   mkdir -p ".ai-harness/examples"
   cp "$HARNESS_ROOT/templates/ai-harness/examples/architecture-rules-nestjs.mdc" ".ai-harness/examples/"
   cp "$HARNESS_ROOT/templates/ai-harness/examples/architecture-rules-python.mdc" ".ai-harness/examples/"
-  echo "  updated: .ai-harness/examples/ (architecture-rules examples)"
+  echo "  updated: .ai-harness/examples/"
   copied=$((copied + 1))
 
-  # cursor-rule.mdc — opt-in only (user may have customized it)
+  # ── 6. cursor-rule.mdc — inject bootstrap line if missing (safe patch) ────
+  local cursor_rule=".ai-harness/cursor-rule.mdc"
+  local bootstrap_line="Bootstrap: read \`.ai-harness/context-index.md\` first before opening any doc or architecture file. Choose the mode prompt from there — prefer \`run-autonomous-cycle-lite.md\` for features and fixes."
+
   if [ "$UPDATE_CURSOR" = "true" ]; then
-    cp ".ai-harness/cursor-rule.mdc" ".ai-harness/cursor-rule.mdc.bak"
-    cp "$HARNESS_ROOT/templates/ai-harness/cursor-rule.mdc" ".ai-harness/cursor-rule.mdc"
-    echo "  updated: .ai-harness/cursor-rule.mdc (backup: cursor-rule.mdc.bak)"
+    cp "$cursor_rule" "${cursor_rule}.bak"
+    cp "$HARNESS_ROOT/templates/ai-harness/cursor-rule.mdc" "$cursor_rule"
+    echo "  replaced: $cursor_rule (backup: cursor-rule.mdc.bak)"
+    copied=$((copied + 1))
+  elif ! grep -q "^Bootstrap:" "$cursor_rule" 2>/dev/null; then
+    # Inject bootstrap line after the closing --- of the frontmatter
+    awk -v line="$bootstrap_line" '
+      BEGIN { count=0; done=0 }
+      /^---$/ { count++; print; if (count==2 && !done) { print ""; print line; done=1 } next }
+      { print }
+    ' "$cursor_rule" > "${cursor_rule}.tmp" && mv "${cursor_rule}.tmp" "$cursor_rule"
+    echo "  patched: $cursor_rule (Bootstrap line injected)"
     copied=$((copied + 1))
   else
-    echo "  skipped: .ai-harness/cursor-rule.mdc (pass --update-cursor-rule to replace)"
+    echo "  ok:      $cursor_rule (Bootstrap line already present)"
+  fi
+
+  # ── 7. profile — create if missing ───────────────────────────────────────
+  if [ ! -f ".ai-harness/profile" ]; then
+    echo "application" > ".ai-harness/profile"
+    echo "  added:   .ai-harness/profile (defaulting to 'application')"
+    copied=$((copied + 1))
+  else
+    echo "  ok:      .ai-harness/profile ($(cat .ai-harness/profile))"
   fi
 
   echo ""
-  echo "Upgrade complete: $copied file(s) added/updated, $skipped already present."
+  echo "Upgrade complete: $copied file(s) added/updated, $skipped skipped."
   echo ""
-  echo "Nothing touched: docs/, architecture/, architecture-rules.mdc, state/project-state.json,"
-  echo "                 state/spec-queue.json, state/run-log.md, specs/, profile."
+  echo "Never touched: docs/, architecture/, architecture-rules.mdc,"
+  echo "               state/project-state.json, spec-queue.json, run-log.md, specs/"
   echo ""
-  echo "New prompts available:"
-  echo "  run-autonomous-cycle-lite.md    feature, fix — default for most tasks"
-  echo "  run-autonomous-cycle-deep.md    architecture, large refactors"
-  echo "  run-resume.md                   resume interrupted session"
-  echo "  run-validation-only.md          verify existing implementation"
-  echo "  run-docs-to-implementation.md   spec/doc → code"
-  echo ""
-  echo "Architecture-rules examples: .ai-harness/examples/"
-  echo "  architecture-rules-nestjs.mdc"
-  echo "  architecture-rules-python.mdc"
+  echo "Prompts:"
+  echo "  run-autonomous-cycle-lite.md    default — features and fixes"
+  echo "  run-autonomous-cycle-deep.md    architecture changes and large refactors"
+  echo "  run-resume.md                   resume an interrupted session"
+  echo "  run-validation-only.md          verify without replanning"
+  echo "  run-docs-to-implementation.md   approved spec/doc → code"
 }
 
 function status_harness() {
@@ -325,21 +380,7 @@ case "$COMMAND" in
     ;;
   upgrade)
     shift || true
-    UPDATE_CURSOR="false"
-    while [ $# -gt 0 ]; do
-      case "$1" in
-        --update-cursor-rule)
-          UPDATE_CURSOR="true"
-          ;;
-        *)
-          echo "Unknown upgrade option: $1" >&2
-          echo "Usage: ai-harness upgrade [--update-cursor-rule]" >&2
-          exit 1
-          ;;
-      esac
-      shift
-    done
-    upgrade_harness "$UPDATE_CURSOR"
+    upgrade_harness "$@"
     ;;
   status)
     status_harness
@@ -356,7 +397,7 @@ case "$COMMAND" in
   -h|--help|help|"")
     echo "Usage:"
     echo "  ai-harness init [application|devops] [--force]"
-    echo "  ai-harness upgrade [--update-cursor-rule]   # non-destructive: adds new files only"
+    echo "  ai-harness upgrade [--update-cursor-rule] [--skip-modes]"
     echo "  ai-harness status"
     echo "  ai-harness doctor"
     echo "  ai-harness architecture-rules   # print Cursor Agent prompt (stdout)"
