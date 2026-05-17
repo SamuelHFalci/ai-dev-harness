@@ -1,0 +1,111 @@
+---
+description: Project architecture — Python / FastAPI (example — replace with real project rules)
+globs: []
+alwaysApply: true
+---
+
+<!-- EXAMPLE FILE — copy to .ai-harness/architecture-rules.mdc and adapt to your actual project.
+     Replace every placeholder with real paths and patterns from your codebase.
+     Delete sections that do not apply. Remove this comment when done. -->
+
+# Project Architecture — Python / FastAPI
+
+## Principles
+
+- Layered architecture: routers handle HTTP, services handle business logic, repositories handle I/O.
+- Dependency injection via FastAPI `Depends()` — no global singletons.
+- Pydantic models for all input/output validation; SQLAlchemy models for DB — never mixed.
+- All external I/O (DB, HTTP clients, queues) is injected, not imported directly into services.
+
+## Project structure
+
+```
+src/
+  <domain>/
+    router.py          # FastAPI router — HTTP only, no business logic
+    service.py         # Business logic
+    repository.py      # DB / external I/O
+    schemas.py         # Pydantic request/response models
+    models.py          # SQLAlchemy ORM models
+    exceptions.py      # Domain-specific exceptions
+  core/
+    config.py          # Settings via pydantic-settings
+    database.py        # SQLAlchemy engine and session factory
+    dependencies.py    # Shared Depends() providers
+    security.py        # Auth utilities
+  tests/
+    <domain>/
+      test_service.py
+      test_router.py
+  main.py              # FastAPI app factory and router registration
+```
+
+## Decision tree
+
+IF task involves a new HTTP endpoint:
+  READ .ai-harness/architecture/HTTP-CONVENTIONS.md
+  → Router file handles routing and Pydantic validation only
+  → Service handles business logic — call service from router via Depends()
+  → Response model must be a Pydantic schema (never return ORM model directly)
+  → Pattern anchor: src/<existing-domain>/router.py
+
+IF task involves database access:
+  READ .ai-harness/architecture/DATABASE.md
+  → All DB access through Repository — inject Session via Depends(get_db)
+  → SQLAlchemy models in models.py — never used as response types
+  → Transactions managed in Service, not Repository
+  → Pattern anchor: src/<existing-domain>/repository.py
+
+IF task involves a new domain:
+  READ .ai-harness/architecture/DOMAIN-CONVENTIONS.md
+  → New package under src/<domain>/
+  → Register router in main.py with prefix and tags
+  → Pattern anchor: src/<existing-domain>/
+
+IF task involves external HTTP calls:
+  READ .ai-harness/architecture/HTTP-CLIENT.md
+  → Use httpx.AsyncClient — inject as Depends(), not module-level singleton
+  → Wrap in a dedicated client class under src/core/ or src/<domain>/
+  → Add timeout and retry configuration
+
+IF task involves background tasks or queues:
+  READ .ai-harness/architecture/ASYNC-TASKS.md
+  → Use Celery (or the project's existing task queue)
+  → Task functions in tasks.py within the relevant domain
+  → Never call task functions directly from service — always .delay() or .apply_async()
+
+IF task involves authentication or authorization:
+  READ .ai-harness/architecture/AUTH.md
+  → JWT validation via get_current_user dependency in src/core/security.py
+  → Permission checks in service layer, not in router
+  → Pattern anchor: src/core/security.py
+
+## Pattern anchor files
+
+| Pattern | Canonical file |
+|---------|---------------|
+| Router | `src/<domain>/router.py` |
+| Service | `src/<domain>/service.py` |
+| Repository | `src/<domain>/repository.py` |
+| Pydantic schema | `src/<domain>/schemas.py` |
+| ORM model | `src/<domain>/models.py` |
+| Shared dependency | `src/core/dependencies.py` |
+| Settings | `src/core/config.py` |
+
+## Implementation safety rules
+
+- Never import Session directly in service or router — always inject via `Depends(get_db)`.
+- Never return SQLAlchemy model objects from router endpoints — always serialize to Pydantic.
+- Never put business logic in router functions — keep them ≤ 10 lines.
+- Never use bare `except Exception` — catch specific exceptions and re-raise as HTTPException or domain exception.
+- Never use `print()` for logging — use `logging` or the project's logger.
+
+## Testing and quality gates
+
+- Unit tests: `pytest tests/` — must pass before any PR.
+- Coverage: `pytest --cov=src --cov-report=term-missing` — check `pyproject.toml` for threshold.
+- Lint: `ruff check src/ tests/` — zero errors.
+- Type check: `mypy src/` — zero errors (or per project standard).
+- Format: `ruff format --check`.
+
+Each spec must have unit tests for its Service methods. Router tests via TestClient are required for specs that add or modify endpoints.

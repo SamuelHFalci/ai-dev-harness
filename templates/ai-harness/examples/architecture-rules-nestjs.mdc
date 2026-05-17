@@ -1,0 +1,114 @@
+---
+description: Project architecture — NestJS (example — replace with real project rules)
+globs: []
+alwaysApply: true
+---
+
+<!-- EXAMPLE FILE — copy to .ai-harness/architecture-rules.mdc and adapt to your actual project.
+     Replace every placeholder with real paths and patterns from your codebase.
+     Delete sections that do not apply. Remove this comment when done. -->
+
+# Project Architecture — NestJS API
+
+## Principles
+
+- Strict module isolation: no cross-module imports except via exported providers.
+- Business logic lives in Services, never in Controllers or Guards.
+- DTOs validate all incoming data; entities are never exposed directly via HTTP.
+- All external I/O (HTTP, DB, queue) is wrapped in a dedicated provider or repository.
+
+## Project structure
+
+```
+src/
+  <domain>/
+    <domain>.module.ts       # Module definition and DI wiring
+    <domain>.controller.ts   # HTTP layer only — no business logic
+    <domain>.service.ts      # Business logic
+    <domain>.repository.ts   # DB / external I/O
+    dto/
+      create-<entity>.dto.ts
+      update-<entity>.dto.ts
+    entities/
+      <entity>.entity.ts
+    __tests__/
+      <domain>.service.spec.ts
+      <domain>.controller.spec.ts
+  common/
+    filters/
+    guards/
+    interceptors/
+    pipes/
+  config/
+    configuration.ts
+  main.ts
+```
+
+## Decision tree
+
+IF task involves a new HTTP endpoint:
+  READ .ai-harness/architecture/HTTP-CONVENTIONS.md
+  → Controller handles routing and DTO validation only
+  → Service handles business logic
+  → Use class-validator + class-transformer on DTOs
+  → Pattern anchor: src/<existing-domain>/<existing-domain>.controller.ts
+
+IF task involves database access:
+  READ .ai-harness/architecture/DATABASE.md
+  → All DB access through Repository pattern
+  → TypeORM entities in entities/ — never expose directly via HTTP
+  → Transactions live in Service, not Repository
+  → Pattern anchor: src/<existing-domain>/<existing-domain>.repository.ts
+
+IF task involves a new module:
+  READ .ai-harness/architecture/MODULE-CONVENTIONS.md
+  → New module under src/<domain>/
+  → Register in AppModule imports
+  → Export only what other modules need
+  → Pattern anchor: src/<existing-domain>/<existing-domain>.module.ts
+
+IF task involves external HTTP calls:
+  READ .ai-harness/architecture/HTTP-CLIENT.md
+  → Use HttpModule from @nestjs/axios
+  → Wrap in a dedicated service, not inline in business service
+  → Add retry and timeout configuration
+
+IF task involves queues or events:
+  READ .ai-harness/architecture/EVENTS.md
+  → Use BullMQ or the project's existing queue abstraction
+  → Processor lives in its own module
+  → Do not mix processor logic with business service logic
+
+IF task involves authentication or authorization:
+  READ .ai-harness/architecture/AUTH.md
+  → JWT validation via JwtAuthGuard
+  → Role-based access via RolesGuard + @Roles() decorator
+  → Never replicate guard logic inline in controllers
+
+## Pattern anchor files
+
+| Pattern | Canonical file |
+|---------|---------------|
+| Controller | `src/<domain>/<domain>.controller.ts` |
+| Service | `src/<domain>/<domain>.service.ts` |
+| Repository | `src/<domain>/<domain>.repository.ts` |
+| DTO | `src/<domain>/dto/create-<entity>.dto.ts` |
+| Module | `src/<domain>/<domain>.module.ts` |
+| Guard | `src/common/guards/<name>.guard.ts` |
+
+## Implementation safety rules
+
+- Never import a Service from another module directly — export it from its module and import the module.
+- Never put `async/await` chains in Controllers — delegate to Services.
+- Never use `any` type — enable strict TypeScript and fix violations.
+- Never expose entity fields not explicitly mapped to a DTO response field.
+
+## Testing and quality gates
+
+- Unit tests: `npm run test` — must pass before any PR.
+- E2E tests: `npm run test:e2e` — must pass for endpoint-touching specs.
+- Coverage minimum: check `jest.config.ts` for the project threshold.
+- Lint: `npm run lint` — zero warnings policy (or per project standard).
+- Format: `npm run format:check`.
+
+Each spec must have unit tests for its Service methods. Controller tests are optional if E2E covers the endpoint.

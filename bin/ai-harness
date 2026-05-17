@@ -114,8 +114,119 @@ function init_harness() {
     echo ""
     echo "   (See .ai-harness/docs/DEVOPS-WORKFLOW.md for how this profile maps specs to IaC.)"
   else
-    echo "   Read and execute .ai-harness/prompts/run-autonomous-cycle.md"
+    echo "   # For most tasks (features, fixes, small refactors):"
+    echo "   Read and execute .ai-harness/prompts/run-autonomous-cycle-lite.md"
+    echo ""
+    echo "   # For architecture changes or large cross-cutting refactors:"
+    echo "   Read and execute .ai-harness/prompts/run-autonomous-cycle-deep.md"
+    echo ""
+    echo "   # To verify existing implementation without replanning:"
+    echo "   Read and execute .ai-harness/prompts/run-validation-only.md"
+    echo ""
+    echo "   # To translate a spec/doc directly into code:"
+    echo "   Read and execute .ai-harness/prompts/run-docs-to-implementation.md"
+    echo ""
+    echo "   # To resume an interrupted session:"
+    echo "   Read and execute .ai-harness/prompts/run-resume.md"
+    echo ""
+    echo "   # Architecture-rules examples (for bootstrap reference):"
+    echo "   .ai-harness/examples/architecture-rules-nestjs.mdc"
+    echo "   .ai-harness/examples/architecture-rules-python.mdc"
+    echo ""
+    echo "   (Legacy: run-autonomous-cycle.md still available for reference.)"
   fi
+}
+
+function upgrade_harness() {
+  ensure_harness_root
+
+  if [ ! -d .ai-harness ]; then
+    echo "Error: .ai-harness/ not found. Run 'ai-harness init' first." >&2
+    exit 1
+  fi
+
+  local UPDATE_CURSOR="${1:-false}"
+  local copied=0
+  local skipped=0
+
+  echo "Upgrading AI Dev Harness (non-destructive — user data untouched)..."
+  echo ""
+
+  # New prompt files — copy only if missing
+  local new_prompts=(
+    "prompts/run-autonomous-cycle-lite.md"
+    "prompts/run-autonomous-cycle-deep.md"
+    "prompts/run-validation-only.md"
+    "prompts/run-docs-to-implementation.md"
+    "prompts/run-resume.md"
+    "prompts/modes/doc-sync-mode.md"
+  )
+  for f in "${new_prompts[@]}"; do
+    if [ ! -f ".ai-harness/$f" ]; then
+      cp "$HARNESS_ROOT/templates/ai-harness/$f" ".ai-harness/$f"
+      echo "  added:   .ai-harness/$f"
+      copied=$((copied + 1))
+    else
+      echo "  exists:  .ai-harness/$f (skipped)"
+      skipped=$((skipped + 1))
+    fi
+  done
+
+  # context-index.md — always refresh (it's a map, not user data)
+  cp "$HARNESS_ROOT/templates/ai-harness/context-index.md" ".ai-harness/context-index.md"
+  echo "  updated: .ai-harness/context-index.md"
+  copied=$((copied + 1))
+
+  # New state files — copy only if missing (never overwrite live state)
+  local new_state=(
+    "state/current-task.md"
+    "state/context-cache.md"
+    "state/decisions.md"
+  )
+  for f in "${new_state[@]}"; do
+    if [ ! -f ".ai-harness/$f" ]; then
+      cp "$HARNESS_ROOT/templates/ai-harness/$f" ".ai-harness/$f"
+      echo "  added:   .ai-harness/$f"
+      copied=$((copied + 1))
+    else
+      echo "  exists:  .ai-harness/$f (skipped)"
+      skipped=$((skipped + 1))
+    fi
+  done
+
+  # Examples directory — always refresh (reference files, not user data)
+  mkdir -p ".ai-harness/examples"
+  cp "$HARNESS_ROOT/templates/ai-harness/examples/architecture-rules-nestjs.mdc" ".ai-harness/examples/"
+  cp "$HARNESS_ROOT/templates/ai-harness/examples/architecture-rules-python.mdc" ".ai-harness/examples/"
+  echo "  updated: .ai-harness/examples/ (architecture-rules examples)"
+  copied=$((copied + 1))
+
+  # cursor-rule.mdc — opt-in only (user may have customized it)
+  if [ "$UPDATE_CURSOR" = "true" ]; then
+    cp ".ai-harness/cursor-rule.mdc" ".ai-harness/cursor-rule.mdc.bak"
+    cp "$HARNESS_ROOT/templates/ai-harness/cursor-rule.mdc" ".ai-harness/cursor-rule.mdc"
+    echo "  updated: .ai-harness/cursor-rule.mdc (backup: cursor-rule.mdc.bak)"
+    copied=$((copied + 1))
+  else
+    echo "  skipped: .ai-harness/cursor-rule.mdc (pass --update-cursor-rule to replace)"
+  fi
+
+  echo ""
+  echo "Upgrade complete: $copied file(s) added/updated, $skipped already present."
+  echo ""
+  echo "Nothing touched: docs/, architecture/, architecture-rules.mdc, state/project-state.json,"
+  echo "                 state/spec-queue.json, state/run-log.md, specs/, profile."
+  echo ""
+  echo "New prompts available:"
+  echo "  run-autonomous-cycle-lite.md    feature, fix — default for most tasks"
+  echo "  run-autonomous-cycle-deep.md    architecture, large refactors"
+  echo "  run-resume.md                   resume interrupted session"
+  echo "  run-validation-only.md          verify existing implementation"
+  echo "  run-docs-to-implementation.md   spec/doc → code"
+  echo ""
+  echo "Architecture-rules examples: .ai-harness/examples/"
+  echo "  architecture-rules-nestjs.mdc"
+  echo "  architecture-rules-python.mdc"
 }
 
 function status_harness() {
@@ -129,6 +240,17 @@ function status_harness() {
   cat .ai-harness/state/project-state.json
 }
 
+function print_cli_prompt() {
+  ensure_harness_root
+  local name="$1"
+  local file="$HARNESS_ROOT/templates/cli-prompts/${name}.txt"
+  if [ ! -f "$file" ]; then
+    echo "Error: missing prompt file: $file" >&2
+    exit 1
+  fi
+  cat "$file"
+}
+
 function doctor_harness() {
   ensure_harness_root
 
@@ -138,12 +260,26 @@ function doctor_harness() {
     "$HARNESS_ROOT/scripts/install.sh"
     "$HARNESS_ROOT/templates/ai-harness/cursor-rule.mdc"
     "$HARNESS_ROOT/templates/ai-harness/architecture-rules.mdc"
+    "$HARNESS_ROOT/templates/ai-harness/context-index.md"
     "$HARNESS_ROOT/templates/ai-harness/prompts/run-autonomous-cycle.md"
+    "$HARNESS_ROOT/templates/ai-harness/prompts/run-autonomous-cycle-lite.md"
+    "$HARNESS_ROOT/templates/ai-harness/prompts/run-autonomous-cycle-deep.md"
+    "$HARNESS_ROOT/templates/ai-harness/prompts/run-resume.md"
+    "$HARNESS_ROOT/templates/ai-harness/prompts/run-validation-only.md"
+    "$HARNESS_ROOT/templates/ai-harness/prompts/run-docs-to-implementation.md"
+    "$HARNESS_ROOT/templates/ai-harness/prompts/modes/doc-sync-mode.md"
+    "$HARNESS_ROOT/templates/ai-harness/examples/architecture-rules-nestjs.mdc"
+    "$HARNESS_ROOT/templates/ai-harness/examples/architecture-rules-python.mdc"
     "$HARNESS_ROOT/templates/ai-harness/state/project-state.json"
     "$HARNESS_ROOT/templates/ai-harness/state/spec-queue.json"
+    "$HARNESS_ROOT/templates/ai-harness/state/current-task.md"
+    "$HARNESS_ROOT/templates/ai-harness/state/context-cache.md"
+    "$HARNESS_ROOT/templates/ai-harness/state/decisions.md"
     "$HARNESS_ROOT/templates/specs"
     "$HARNESS_ROOT/templates/profiles/devops/prompts/run-devops-cycle.md"
     "$HARNESS_ROOT/templates/profiles/devops/docs/DEVOPS-WORKFLOW.md"
+    "$HARNESS_ROOT/templates/cli-prompts/architecture-rules.txt"
+    "$HARNESS_ROOT/templates/cli-prompts/spec-decomposition.txt"
   )
 
   for path in "${required_paths[@]}"; do
@@ -187,25 +323,55 @@ case "$COMMAND" in
     done
     init_harness "$PROFILE" "$FORCE"
     ;;
+  upgrade)
+    shift || true
+    UPDATE_CURSOR="false"
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        --update-cursor-rule)
+          UPDATE_CURSOR="true"
+          ;;
+        *)
+          echo "Unknown upgrade option: $1" >&2
+          echo "Usage: ai-harness upgrade [--update-cursor-rule]" >&2
+          exit 1
+          ;;
+      esac
+      shift
+    done
+    upgrade_harness "$UPDATE_CURSOR"
+    ;;
   status)
     status_harness
     ;;
   doctor)
     doctor_harness
     ;;
+  architecture-rules)
+    print_cli_prompt "architecture-rules"
+    ;;
+  spec-decomposition)
+    print_cli_prompt "spec-decomposition"
+    ;;
   -h|--help|help|"")
     echo "Usage:"
     echo "  ai-harness init [application|devops] [--force]"
+    echo "  ai-harness upgrade [--update-cursor-rule]   # non-destructive: adds new files only"
     echo "  ai-harness status"
     echo "  ai-harness doctor"
+    echo "  ai-harness architecture-rules   # print Cursor Agent prompt (stdout)"
+    echo "  ai-harness spec-decomposition   # print Cursor Agent prompt (stdout)"
     ;;
   *)
     echo "Unknown command: $COMMAND" >&2
     echo "" >&2
     echo "Usage:"
     echo "  ai-harness init [application|devops] [--force]"
+    echo "  ai-harness upgrade [--update-cursor-rule]"
     echo "  ai-harness status"
     echo "  ai-harness doctor"
+    echo "  ai-harness architecture-rules"
+    echo "  ai-harness spec-decomposition"
     exit 1
     ;;
 esac

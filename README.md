@@ -43,14 +43,37 @@ ai-harness init devops --force
 Then open Cursor Agent and run one of:
 
 ```text
-Read and execute .ai-harness/prompts/run-autonomous-cycle.md
+# Features, fixes, isolated specs (default — 80% of tasks)
+Read and execute .ai-harness/prompts/run-autonomous-cycle-lite.md
 ```
 
 ```text
+# Architecture changes, large refactors, greenfield first run
+Read and execute .ai-harness/prompts/run-autonomous-cycle-deep.md
+```
+
+```text
+# DevOps / IaC profile only
 Read and execute .ai-harness/prompts/run-devops-cycle.md
 ```
 
-Use **`run-devops-cycle.md`** when `.ai-harness/profile` contains **`devops`** (after `ai-harness init devops`). Otherwise use **`run-autonomous-cycle.md`**.
+```text
+# Resume an interrupted session
+Read and execute .ai-harness/prompts/run-resume.md
+```
+
+See **[MANUAL.md](MANUAL.md)** (English) or **[MANUAL-PT-BR.md](MANUAL-PT-BR.md)** (Português) for a complete decision-tree guide covering every project state.
+
+## Copy-paste prompts (no retyping between machines)
+
+From any directory (prints the full Agent prompt to stdout):
+
+```bash
+ai-harness architecture-rules
+ai-harness spec-decomposition
+```
+
+Pipe to your OS clipboard if you want, for example on Windows Git Bash: `ai-harness architecture-rules | clip.exe`.
 
 ## Migrating from older layouts (`harness/` + `harness.mdc`)
 

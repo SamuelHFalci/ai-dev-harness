@@ -1,52 +1,34 @@
 ---
-description: Autonomous AI Development Harness (local)
+description: AI Dev Harness — lean entry point
 alwaysApply: true
 ---
 
-You are operating inside an autonomous AI software engineering harness.
+Bootstrap: read `.ai-harness/context-index.md` first. It maps every file you may need. Do not load docs or mode files before reading it.
 
-Core rules:
+## Principles
 
-- Always read .ai-harness/state/project-state.json before acting.
-- If `.ai-harness/profile` exists and its first non-empty line is `devops`, treat **`.ai-harness/prompts/run-devops-cycle.md`** as the primary autonomous runner; otherwise use **`.ai-harness/prompts/run-autonomous-cycle.md`**.
-- Always read .cursor/rules/architecture-rules.mdc if it exists.
-- Always read .specify/memory/constitution.md if it exists.
-- Work spec-by-spec.
-- Never skip architecture review before spec generation.
-- Never skip review stages.
-- Never skip tests.
-- Never claim completion without validation.
-- Prefer small reversible changes.
-- Preserve existing architecture unless explicitly required.
-- Stop if a real blocker appears.
-- When closing a spec (COMPLETE_SPEC → NEXT_SPEC), apply the **Spec closure checklist** in the active runner (`.ai-harness/prompts/run-autonomous-cycle.md` or `.ai-harness/prompts/run-devops-cycle.md`, per profile) so `project-state.json`, `spec-queue.json`, and `runtime/human-needed.md` stay consistent.
-- Before opening a PR that bundles completed specs, run the **Pre-PR final gate** (see `.ai-harness/prompts/modes/pre-pr-final-gate-mode.md`) and keep **`.ai-harness/runtime/pre-pr-signoff.md`** as the branch-level QA + review record.
+- Load context on demand. Never read entire doc folders; grep first, then open specific files.
+- One mode prompt per session. Load mode files only for the active stage.
+- Prefer `grep`/`rg` and partial reads over full file loads.
+- Edit files directly; never paste large code blocks into chat.
+- Keep state in `project-state.json` + `current-task.md` + `decisions.md`.
+- Append one line per run to `run-log.md`; keep entries short.
 
-Project documentation lives in:
+## Hard rules
 
-- .ai-harness/docs/00-project-context/
-- .ai-harness/docs/10-feature-requests/
-- .ai-harness/docs/20-change-requests/
+- Never claim completion without tests passing.
+- Never skip QA or code review.
+- Never ignore `architecture-rules.mdc` when it exists.
+- Stop at real blockers; write `runtime/human-needed.md` with evidence and required decision.
+- Never silently mutate completed specs; create amendment/bugfix specs instead.
 
-Project architecture documentation lives in (consultant-local; under gitignored `.ai-harness/`):
+## Profile routing
 
-- .ai-harness/architecture/
+Read `.ai-harness/profile` once:
+- `application` (default) → use `run-autonomous-cycle-lite.md` or `run-autonomous-cycle-deep.md`
+- `devops` → use `run-devops-cycle.md`
 
-Harness runtime lives in (local only; typically gitignored):
+## Internal modes
 
-- .ai-harness/
-
-Internal modes:
-
-- ADOPTION
-- ARCHITECTURE_BOOTSTRAP
-- DISCOVERY
-- SPEC_DECOMPOSER
-- SPEC_REVIEWER
-- SPECKIT
-- PLAN_REVIEWER
-- TASK_REVIEWER
-- IMPLEMENTER
-- QA
-- CODE_REVIEWER
-- ORCHESTRATOR
+ADOPTION · ARCHITECTURE_BOOTSTRAP · DISCOVERY · SPEC_DECOMPOSER · SPEC_REVIEWER
+SPECKIT · PLAN_REVIEWER · TASK_REVIEWER · IMPLEMENTER · QA · CODE_REVIEWER · ORCHESTRATOR
