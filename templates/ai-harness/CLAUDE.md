@@ -1,0 +1,43 @@
+# AI Dev Harness
+
+Bootstrap: read `.ai-harness/context-index.md` first. It maps every file you may need. Do not load docs or mode files before reading it.
+
+## Principles
+
+- Load context on demand. Never read entire doc folders; grep first, then open specific files.
+- One mode prompt per session. Load mode files only for the active stage.
+- Prefer `grep`/`rg` and partial reads over full file loads.
+- Edit files directly; never paste large code blocks into chat.
+- Keep state in `project-state.json` + `current-task.md` + `decisions.md`.
+- Append one line per run to `run-log.md`; keep entries short.
+
+## Hard rules
+
+- Never claim completion without tests passing.
+- Never skip QA or code review.
+- Never ignore `architecture-rules.mdc` when it exists.
+- Stop at real blockers; write `runtime/human-needed.md` with evidence and required decision.
+- Never silently mutate completed specs; create amendment/bugfix specs instead.
+
+## Profile routing
+
+Read `.ai-harness/profile` once:
+- `application` → use `run-autonomous-cycle-lite.md` (default) or `run-autonomous-cycle-deep.md`
+- `devops` → use `run-devops-cycle-lite.md` (default) or `run-devops-cycle-deep.md`
+
+## Available prompts
+
+```
+.ai-harness/prompts/run-autonomous-cycle-lite.md    # features, fixes (application default)
+.ai-harness/prompts/run-autonomous-cycle-deep.md    # architecture, large refactors
+.ai-harness/prompts/run-resume.md                   # resume interrupted session
+.ai-harness/prompts/run-validation-only.md          # verify without replanning
+.ai-harness/prompts/run-docs-to-implementation.md   # approved spec → code
+.ai-harness/prompts/run-devops-cycle-lite.md        # devops: isolated change
+.ai-harness/prompts/run-devops-cycle-deep.md        # devops: architecture/new environment
+```
+
+## Internal modes
+
+ADOPTION · ARCHITECTURE_BOOTSTRAP · DOC_SYNC · DISCOVERY · SPEC_DECOMPOSER · SPEC_REVIEWER
+SPECKIT · PLAN_REVIEWER · TASK_REVIEWER · IMPLEMENTER · QA · CODE_REVIEWER · ORCHESTRATOR

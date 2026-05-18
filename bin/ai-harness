@@ -31,6 +31,7 @@ function append_gitignore_harness() {
   grep -Fxq "/.ai-harness/" "$gi" 2>/dev/null || echo "/.ai-harness/" >> "$gi"
   grep -Fxq ".cursor/rules/ai-dev-harness.mdc" "$gi" 2>/dev/null || echo ".cursor/rules/ai-dev-harness.mdc" >> "$gi"
   grep -Fxq ".cursor/rules/architecture-rules.mdc" "$gi" 2>/dev/null || echo ".cursor/rules/architecture-rules.mdc" >> "$gi"
+  grep -Fxq "CLAUDE.md" "$gi" 2>/dev/null || echo "CLAUDE.md" >> "$gi"
 }
 
 function init_harness() {
@@ -90,6 +91,9 @@ function init_harness() {
     cp -R "$HARNESS_ROOT/templates/specs/." specs/
   fi
 
+  # CLAUDE.md — VS Code + Claude Code equivalent of cursor-rule.mdc
+  cp "$HARNESS_ROOT/templates/ai-harness/CLAUDE.md" "$here/CLAUDE.md"
+
   append_gitignore_harness
 
   echo "AI Dev Harness initialized."
@@ -98,6 +102,8 @@ function init_harness() {
   echo "Cursor symlinks:"
   echo "  .cursor/rules/ai-dev-harness.mdc   -> .ai-harness/cursor-rule.mdc"
   echo "  .cursor/rules/architecture-rules.mdc -> .ai-harness/architecture-rules.mdc"
+  echo "VS Code / Claude Code:"
+  echo "  CLAUDE.md (gitignored)"
   echo "Deep-dive arch markdown: .ai-harness/architecture/"
   echo "Harness input docs (local): .ai-harness/docs/00-project-context|10-feature-requests|20-change-requests/"
   echo ""
@@ -213,10 +219,22 @@ function upgrade_harness() {
   fi
 
 
-  # ── 2. context-index.md — always refresh (map file, not user data) ────────
+  # ── 2. context-index.md + CLAUDE.md — always refresh (map files, not user data) ──
   cp "$HARNESS_ROOT/templates/ai-harness/context-index.md" ".ai-harness/context-index.md"
   echo "  updated: .ai-harness/context-index.md"
   copied=$((copied + 1))
+
+  local here
+  here="$(pwd)"
+  cp "$HARNESS_ROOT/templates/ai-harness/CLAUDE.md" "$here/CLAUDE.md"
+  echo "  updated: CLAUDE.md (VS Code / Claude Code)"
+  copied=$((copied + 1))
+
+  # Ensure CLAUDE.md is gitignored
+  if [ -f ".gitignore" ] && ! grep -q "^CLAUDE.md" ".gitignore" 2>/dev/null; then
+    echo "CLAUDE.md" >> ".gitignore"
+    echo "  patched: .gitignore (added CLAUDE.md)"
+  fi
 
   # ── 3. New state files — add only if missing (never overwrite live state) ─
   local new_state=(
@@ -342,6 +360,7 @@ function doctor_harness() {
     "$HARNESS_ROOT/templates/ai-harness/cursor-rule.mdc"
     "$HARNESS_ROOT/templates/ai-harness/architecture-rules.mdc"
     "$HARNESS_ROOT/templates/ai-harness/context-index.md"
+    "$HARNESS_ROOT/templates/ai-harness/CLAUDE.md"
     "$HARNESS_ROOT/templates/ai-harness/prompts/run-autonomous-cycle.md"
     "$HARNESS_ROOT/templates/ai-harness/prompts/run-autonomous-cycle-lite.md"
     "$HARNESS_ROOT/templates/ai-harness/prompts/run-autonomous-cycle-deep.md"
