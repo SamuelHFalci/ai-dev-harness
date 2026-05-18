@@ -1,162 +1,280 @@
 ---
-description: Project architecture — Ansible (example based on pmz-ansible conventions)
+description: Project architecture — Ansible
 globs: []
 alwaysApply: true
 ---
 
 <!-- EXAMPLE FILE — copy to .ai-harness/architecture-rules.mdc and adapt to your project.
-     Replace placeholders with real paths and group names from your inventory.
+     Replace group names, paths, and vault IDs with your real values.
      Remove this comment when done. -->
 
 # Project Architecture — Ansible
 
 ## Principles
 
-- Single inventory file while managing one environment group; expand to `inventory/<env>/` only when adding multiple environments.
-- All modules referenced by FQCN (`ansible.builtin.*`, `community.*`). Never use short names.
-- No hardcoded credentials anywhere in the repo — secrets via Ansible Vault or runtime prompts.
-- Roles for any logic used by more than one playbook. Flat tasks in playbook for one-off or bootstrap work.
-- `become: true` is set globally in `ansible.cfg`; do not repeat it in every task unless explicitly overriding.
+- **Idempotency is the primary correctness test.** Run the playbook twice in a row. The second run must report `changed=0`. Any task that fails this is broken, regardless of whether it produces the right output.
+- Always use FQCN (`ansible.builtin.*`, `ansible.posix.*`, `community.general.*`). Never short module names.
+- Prefer idempotent modules over `shell`/`command`. Use `shell`/`command` only when no module exists, and always pair with `creates:`, `removes:`, or `changed_when:`.
+- One variable definition per variable — never define the same variable in multiple places.
+- No plaintext secrets anywhere in the repo. Vault all credentials.
+- `--check --diff` before every production apply, every time. Never apply without reviewing the diff first.
+
+---
 
 ## Project structure
 
+### Minimum viable (single environment)
 ```
 .
-├── ansible.cfg              # global config — source of truth for paths and defaults
-├── inventory                # single INI file (expand to inventory/<env>/ when multi-env)
-├── group_vars/              # group-level variables (create when inventory grows)
-│   └── <group>.yml
-├── host_vars/               # host-level overrides (create when needed)
-│   └── <hostname>.yml
-├── roles/                   # reusable roles (configured in ansible.cfg: roles_path = ./roles)
-│   └── <role-name>/
-│       ├── tasks/
-│       │   └── main.yml     # entry point — import_tasks for subtasks
-│       ├── handlers/
-│       │   └── main.yml
-│       ├── defaults/        # low-priority defaults — always define vars here first
-│       │   └── main.yml
-│       ├── vars/            # high-priority vars — use sparingly
-│       │   └── main.yml
-│       ├── templates/       # Jinja2 templates (.j2)
-│       ├── files/           # static files
-│       └── meta/
-│           └── main.yml     # role dependencies and Galaxy metadata
-├── collections/             # installed collections (gitignored; installed via requirements.yml)
-├── playbook.yml             # main playbook (or playbooks/<name>.yml when multiple)
-└── requirements.yml         # Galaxy roles and collections (create when using external content)
+├── ansible.cfg
+├── inventory                   # INI or YAML — single group
+├── group_vars/
+│   └── <group>/
+│       ├── vars.yml            # plaintext variable names
+│       └── vault.yml           # encrypted values
+└── playbook.yml
 ```
 
-## ansible.cfg conventions (do not change without documenting the reason)
+### Production (multi-environment)
+```
+.
+├── ansible.cfg
+├── requirements.yml            # pinned roles and collections — always pin versions
+├── site.yml                    # master playbook
+├── inventories/
+│   ├── production/
+│   │   ├── hosts               # production host list
+│   │   └── group_vars/
+│   │       ├── all/
+│   │       │   ├── vars.yml    # shared plaintext vars
+│   │       │   └── vault.yml   # shared secrets (encrypted)
+│   │       └── <group>/
+│   │           ├── vars.yml
+│   │           └── vault.yml
+│   └── staging/
+│       ├── hosts
+│       └── group_vars/
+├── roles/
+│   └── <role-name>/
+│       ├── tasks/main.yml
+│       ├── handlers/main.yml
+│       ├── defaults/main.yml   # overridable defaults — define all role vars here first
+│       ├── vars/main.yml       # role-internal constants (high precedence — use sparingly)
+│       ├── templates/          # .j2 Jinja2 templates
+│       ├── files/              # static files
+│       ├── meta/main.yml       # role dependencies
+│       └── README.md           # documents all variables and defaults
+└── collections/                # gitignored — installed from requirements.yml
+```
+
+---
+
+## ansible.cfg conventions
 
 ```ini
 [defaults]
-inventory = ./inventory
-stdout_callback = yaml          # human-readable output
+inventory = ./inventory         # or ./inventories/<env>/hosts
+stdout_callback = yaml
 retry_files_enabled = False
 interpreter_python = auto_silent
 roles_path = ./roles
 collections_paths = ./collections
+host_key_checking = True        # False only in dev/lab — never in prod
+
+# Multi-env vault (one identity per environment):
+# vault_identity_list = prod@~/.vault/prod_pass, staging@~/.vault/staging_pass
 
 [privilege_escalation]
 become = True
 become_method = sudo
-become_ask_pass = False         # password provided at runtime via -K or vault
+become_ask_pass = False         # provide via -K or vault
 
 [ssh_connection]
-pipelining = True               # performance — requires requiretty disabled on targets
+pipelining = True               # requires: Defaults !requiretty in /etc/sudoers
 ```
+
+---
 
 ## Decision tree
 
-IF task involves a new playbook:
-  → Target an existing inventory group (`hosts: <group>`)
+IF task adds a new play or set of tasks:
   → One play per logical concern — do not mix unrelated roles in one play
-  → If playbook will be run standalone more than once: move to `playbooks/<name>.yml`
+  → Tag every task: at minimum `[<feature>, <layer>]` e.g. `[nginx, config]`
+  → If logic will be used by >1 playbook → move to a role
   → Pattern anchor: `playbook.yml`
 
-IF task involves repeated logic (used in >1 playbook):
+IF task involves a new role:
   READ .ai-harness/architecture/ROLE-CONVENTIONS.md
-  → Create role under `roles/<role-name>/`
-  → Entry point: `tasks/main.yml` — use `import_tasks:` for subtask files
-  → Variables: defaults in `defaults/main.yml` (overridable); constants in `vars/main.yml`
-  → All templates in `templates/` with `.j2` extension
+  → Create `roles/<role-name>/` with standard layout
+  → Entry point: `tasks/main.yml` — use `import_tasks:` for subtask files, `include_tasks:` only when dynamic inclusion is required
+  → All variables declared in `defaults/main.yml` (overridable)
+  → Role-internal constants only in `vars/main.yml`
+  → Document every variable in `README.md`
+  → Single responsibility: one feature per role
   → Pattern anchor: `roles/<existing-role>/`
 
-IF task involves host or group variables:
+IF task involves variables or secrets:
   READ .ai-harness/architecture/VARIABLES.md
-  → Group vars: `group_vars/<group>.yml` (create if not exists)
-  → Host vars: `host_vars/<hostname>.yml` (for host-specific overrides only)
-  → Variable naming: `snake_case`, prefixed with role name for role vars (e.g. `nginx_port`)
-  → Never define the same variable in both `group_vars/` and `defaults/main.yml` — pick one
+  → vars/vault split pattern (mandatory):
+    - `group_vars/<group>/vars.yml`: `db_password: "{{ vault_db_password }}"`  ← plaintext name, greppable
+    - `group_vars/<group>/vault.yml`: `vault_db_password: actual_secret`        ← encrypted value
+  → Prefix all vault values with `vault_`: `vault_<variable_name>`
+  → Never define the same variable in both `defaults/main.yml` and `group_vars/` — pick one
+  → Variable precedence (simplified): `-e` extra vars > `set_fact` > task vars > role vars > `vars_files` > `vars_prompt` > play vars > `host_vars` > `group_vars` > inventory > role defaults
+  → Conditionals: `when: ansible_facts['os_family'] == "Debian"` — no `{{ }}` in `when:`
 
-IF task involves secrets (passwords, tokens, keys):
+IF task involves secrets or credentials:
   READ .ai-harness/architecture/SECRETS.md
-  → Encrypt with `ansible-vault encrypt_string` or vault files
-  → Vault password file: `.vault_pass` (gitignored — never commit)
-  → Reference in ansible.cfg: `vault_password_file = .vault_pass`
-  → Never hardcode secrets in inventory, vars files, or playbooks
-  → Prefix encrypted vars with `vault_` to make them identifiable
+  → Encrypt with: `ansible-vault encrypt_string` (inline) or `ansible-vault encrypt vault.yml` (file)
+  → Edit vault files with: `ansible-vault edit vault.yml` — never decrypt → edit → re-encrypt
+  → Multi-environment: use vault identity list in ansible.cfg, encrypt per identity
+  → CI/CD: vault password from CI secret store — never committed to repo
+  → `.vault_pass` and `*.vault_pass` must be in `.gitignore`
 
-IF task involves external roles or collections:
-  → Add to `requirements.yml` under `roles:` or `collections:`
-  → Install with: `ansible-galaxy install -r requirements.yml`
-  → `collections/` is gitignored — always install from `requirements.yml`
-  → Pin versions in `requirements.yml` to avoid unexpected upgrades
+IF task needs to handle command output or non-idempotent operations:
+  READ .ai-harness/architecture/ERROR-HANDLING.md
+  → `changed_when: "'Updated' in result.stdout"` — control changed status for shell/command
+  → `failed_when: result.rc != 0 and 'already exists' not in result.stderr"` — redefine failure
+  → `ignore_errors: true` — only with a documented comment explaining why
+  → `block:` / `rescue:` / `always:` — for try/catch/finally patterns
+  → `meta: flush_handlers` — when a later task depends on a handler having already run
 
-IF task involves adding a new environment (dev/staging/prod):
+IF task involves service reload or restart:
+  READ .ai-harness/architecture/HANDLERS.md
+  → Use handlers for: service restarts, config reloads, daemon-reload
+  → Notify from the task that changes config: `notify: Restart nginx`
+  → Handler name must match notify string exactly (case and whitespace)
+  → Handlers run once at end of play — use `meta: flush_handlers` if mid-play execution needed
+  → `listen:` pattern for multiple handlers sharing one trigger
+
+IF task involves adding a new environment:
   READ .ai-harness/architecture/INVENTORY.md
-  → Convert `inventory` file to `inventory/` directory
-  → Structure: `inventory/<env>/hosts.ini` + `inventory/<env>/group_vars/`
-  → Common vars: `group_vars/all.yml`; env-specific: `group_vars/<env>.yml`
-  → Update `ansible.cfg`: `inventory = ./inventory/<env>` or pass `-i inventory/<env>` at runtime
+  → Convert `inventory` file to `inventories/<env>/hosts`
+  → Separate `group_vars/` per environment under `inventories/<env>/group_vars/`
+  → Shared vars: `inventories/<env>/group_vars/all/vars.yml`
+  → Update ansible.cfg or pass `-i inventories/<env>/` at runtime
+  → Use separate vault identity per environment
 
-IF task involves CI/CD (automated runs):
-  READ .ai-harness/architecture/PIPELINE.md
-  → Lint gate: `ansible-lint` must pass before merge
-  → Syntax check: `ansible-playbook --syntax-check playbook.yml`
-  → Dry-run (check mode): `ansible-playbook --check --diff playbook.yml`
-  → Never run apply (`ansible-playbook` without `--check`) autonomously — stop and present diff for human approval
+IF task uses external roles or collections:
+  → Add to `requirements.yml` with pinned versions — never `version: latest`
+  → Install with: `ansible-galaxy install -r requirements.yml --force`
+  → `collections/` is gitignored — always install from `requirements.yml`
+  → Three main namespaces: `ansible.builtin.*`, `ansible.posix.*`, `community.general.*`
+
+IF task is a fleet operation (rolling update, production change):
+  → `serial: "20%"` or `serial: 1` for controlled rollout
+  → `any_errors_fatal: true` for all-or-nothing operations
+  → `max_fail_percentage: 10` for tolerated failure rate
+  → `--limit <group>` to scope to a subset before full fleet
+
+---
+
+## Module selection (prefer over shell/command)
+
+| Operation | Module |
+|-----------|--------|
+| Copy file | `ansible.builtin.copy` |
+| Template | `ansible.builtin.template` |
+| Create dir | `ansible.builtin.file` with `state: directory` |
+| Install package (apt) | `ansible.builtin.apt` |
+| Install package (any) | `ansible.builtin.package` |
+| Manage service | `ansible.builtin.service` (via handler) |
+| Edit line in file | `ansible.builtin.lineinfile` |
+| Replace pattern | `ansible.builtin.replace` |
+| Run arbitrary cmd | `ansible.builtin.command` with `creates:` or `changed_when:` |
+| Run with shell features | `ansible.builtin.shell` with `changed_when:` |
+| Sync dirs (rsync) | `ansible.posix.synchronize` |
+| Set sysctl | `ansible.posix.sysctl` |
+| Manage firewalld | `ansible.posix.firewalld` |
+
+---
 
 ## Pattern anchor files
 
 | Pattern | Canonical file |
 |---------|---------------|
-| Playbook structure | `playbook.yml` |
+| Playbook structure | `playbook.yml` (or `site.yml`) |
 | Role task entry | `roles/<role>/tasks/main.yml` |
 | Role defaults | `roles/<role>/defaults/main.yml` |
-| Group variables | `group_vars/<group>.yml` |
-| Inventory | `inventory` (or `inventory/<env>/hosts.ini` when multi-env) |
+| Vars/vault split | `group_vars/<group>/vars.yml` + `group_vars/<group>/vault.yml` |
+| Inventory | `inventory` (or `inventories/<env>/hosts`) |
+| External deps | `requirements.yml` |
+
+---
 
 ## Variable naming conventions
 
 | Type | Convention | Example |
 |------|-----------|---------|
 | Ansible built-in | `ansible_*` | `ansible_user`, `ansible_host` |
-| Ansible facts | `ansible_*` | `ansible_distribution` |
-| Role variables | `<role>_<name>` | `nginx_port`, `nginx_user` |
+| Ansible facts | `ansible_facts['key']` | `ansible_facts['os_family']` |
+| Role variable | `<role>_<name>` | `nginx_port`, `nginx_user` |
 | Vault-encrypted | `vault_<name>` | `vault_db_password` |
+| Plaintext reference | `<name>: "{{ vault_<name> }}"` | `db_password: "{{ vault_db_password }}"` |
 | Playbook-scoped | `snake_case` | `app_version` |
 
-## Auth model
-
-- SSH: username + password via runtime prompts (`--ask-pass` / `-k`) or Vault
-- Sudo: `become = True` globally; password via `--ask-become-pass` / `-K` or Vault
-- Requires `sshpass` installed on the controller for password-based SSH
-- Target hosts: Debian/Ubuntu with `python3` at `/usr/bin/python3`
+---
 
 ## Implementation safety rules
 
-- Never run `ansible-playbook` without `--check --diff` first — always review the diff before applying.
-- Never commit `.vault_pass`, `*.vault_pass`, or any file containing plaintext credentials.
-- Never use `ignore_errors: true` without documenting why in a comment on the same task.
-- Never use `shell:` or `command:` when an idempotent module exists for the same operation.
-- Always use FQCN for modules: `ansible.builtin.copy`, not `copy`.
+- Never apply without `--check --diff` first. Present the diff for human approval before any production apply.
+- Never use short module names — always FQCN.
+- Never use `shell:`/`command:` without `creates:`, `removes:`, or `changed_when:`.
+- Never commit `.vault_pass`, `*.vault_pass`, or any plaintext credential.
+- Never use `ansible-vault decrypt` → edit → `encrypt` — always use `ansible-vault edit`.
+- Never use `ignore_errors: true` without a comment explaining why.
+- Never define the same variable in multiple precedence levels.
+- Never use `{{ }}` in `when:` conditions — `when: my_var == "value"`, not `when: "{{ my_var }}" == "value"`.
+- Never use tabs in YAML — two-space indent only.
+- `host_key_checking = False` only in dev/lab environments — never in production.
+- Requires `Defaults !requiretty` in `/etc/sudoers` on targets when `pipelining = True`.
 
-## Testing and quality gates
+---
 
-- Lint: `ansible-lint` — zero warnings before any PR
-- Syntax check: `ansible-playbook --syntax-check <playbook>.yml`
-- Dry-run: `ansible-playbook --check --diff <playbook>.yml` against a non-prod target
-- Molecule: `molecule test` — required for any role that will be reused across projects
-- All gates must pass before `READY_FOR_PR: yes`
+## Testing and quality gates (three-layer)
+
+### Layer 1 — Lint (seconds, no infrastructure needed)
+```bash
+yamllint .                                    # YAML formatting
+ansible-lint --profile moderate playbook.yml  # Ansible semantics (FQCN, idempotency, security)
+```
+Start at `basic` profile, ratchet up to `moderate` → `safety` → `production` as the project matures.
+
+### Layer 2 — Molecule (seconds to minutes per scenario)
+```bash
+molecule test                    # full lifecycle: create → converge → idempotence → verify → destroy
+molecule converge                # converge only (faster iteration)
+molecule idempotency             # run converge twice, assert changed=0
+```
+- Driver: `docker` (default) using `geerlingguy/docker-<distro>-ansible` images (include systemd)
+- Multi-OS: CI matrix across distros, not multiple scenarios
+
+### Layer 3 — Idempotency check (always, any target)
+```bash
+ansible-playbook playbook.yml    # run 1
+ansible-playbook playbook.yml    # run 2 — must report changed=0
+```
+This is the single most important correctness test. Run before closing any spec.
+
+### CI gate sequence
+1. `yamllint` — fail fast on formatting
+2. `ansible-lint` — fail fast on semantics
+3. `ansible-playbook --syntax-check` — catch YAML/template errors
+4. `ansible-playbook --check --diff` — review changes (present output for human approval)
+5. Molecule matrix (if roles are involved)
+
+**Never run `ansible-playbook` without `--check` autonomously.** Always stop after step 4 and request human approval before the actual apply.
+
+---
+
+## Debugging ladder
+
+```bash
+ansible all -m ping                          # 1. connectivity
+ansible-inventory --host <hostname>          # 2. variable resolution
+ansible-playbook --syntax-check playbook.yml # 3. YAML syntax
+ansible-playbook --check --diff playbook.yml # 4. see what would change
+ansible-playbook -vvv playbook.yml           # 5. SSH + module details (sweet spot)
+```
+
+Verbosity: `-v` task results · `-vv` + module args · `-vvv` + SSH (use this) · `-vvvv` plugin internals (very noisy)
