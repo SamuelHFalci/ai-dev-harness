@@ -26,7 +26,7 @@ Bootstrap: read `.ai-harness/context-index.md` first. It maps every file you may
 
 Read `.ai-harness/profile` once:
 - `application` (default) → use `run-autonomous-cycle-lite.md` or `run-autonomous-cycle-deep.md`
-- `devops` → use `run-devops-cycle.md`
+- `devops` → use `run-devops-cycle-lite.md` (default) or `run-devops-cycle-deep.md` (architecture/new environments)
 
 ## Internal modes
 

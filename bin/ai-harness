@@ -61,6 +61,8 @@ function init_harness() {
   if [ "$PROFILE" = "devops" ]; then
     mkdir -p .ai-harness/prompts .ai-harness/docs
     cp "$HARNESS_ROOT/templates/profiles/devops/prompts/run-devops-cycle.md" .ai-harness/prompts/
+    cp "$HARNESS_ROOT/templates/profiles/devops/prompts/run-devops-cycle-lite.md" .ai-harness/prompts/
+    cp "$HARNESS_ROOT/templates/profiles/devops/prompts/run-devops-cycle-deep.md" .ai-harness/prompts/
     cp "$HARNESS_ROOT/templates/profiles/devops/docs/DEVOPS-WORKFLOW.md" .ai-harness/docs/
   fi
 
@@ -110,9 +112,13 @@ function init_harness() {
   echo "3. Open Cursor Agent and run:"
   echo ""
   if [ "$PROFILE" = "devops" ]; then
-    echo "   Read and execute .ai-harness/prompts/run-devops-cycle.md"
+    echo "   # For isolated changes (module update, pipeline fix, single resource):"
+    echo "   Read and execute .ai-harness/prompts/run-devops-cycle-lite.md"
     echo ""
-    echo "   (See .ai-harness/docs/DEVOPS-WORKFLOW.md for how this profile maps specs to IaC.)"
+    echo "   # For new environments, architecture changes, or high blast-radius work:"
+    echo "   Read and execute .ai-harness/prompts/run-devops-cycle-deep.md"
+    echo ""
+    echo "   (See .ai-harness/docs/DEVOPS-WORKFLOW.md for full runner guidance.)"
   else
     echo "   # For most tasks (features, fixes, small refactors):"
     echo "   Read and execute .ai-harness/prompts/run-autonomous-cycle-lite.md"
@@ -186,6 +192,26 @@ function upgrade_harness() {
       skipped=$((skipped + 1))
     fi
   done
+
+  # ── 1b. DevOps-specific prompts — only for devops profile ────────────────
+  if [ -f ".ai-harness/profile" ] && [ "$(cat .ai-harness/profile | tr -d '[:space:]')" = "devops" ]; then
+    local devops_prompts=(
+      "run-devops-cycle-lite.md"
+      "run-devops-cycle-deep.md"
+    )
+    for f in "${devops_prompts[@]}"; do
+      local src="$HARNESS_ROOT/templates/profiles/devops/prompts/$f"
+      if [ ! -f ".ai-harness/prompts/$f" ]; then
+        cp "$src" ".ai-harness/prompts/$f"
+        echo "  added:   .ai-harness/prompts/$f"
+        copied=$((copied + 1))
+      else
+        echo "  exists:  .ai-harness/prompts/$f (skipped)"
+        skipped=$((skipped + 1))
+      fi
+    done
+  fi
+
 
   # ── 2. context-index.md — always refresh (map file, not user data) ────────
   cp "$HARNESS_ROOT/templates/ai-harness/context-index.md" ".ai-harness/context-index.md"
@@ -332,6 +358,8 @@ function doctor_harness() {
     "$HARNESS_ROOT/templates/ai-harness/state/decisions.md"
     "$HARNESS_ROOT/templates/specs"
     "$HARNESS_ROOT/templates/profiles/devops/prompts/run-devops-cycle.md"
+    "$HARNESS_ROOT/templates/profiles/devops/prompts/run-devops-cycle-lite.md"
+    "$HARNESS_ROOT/templates/profiles/devops/prompts/run-devops-cycle-deep.md"
     "$HARNESS_ROOT/templates/profiles/devops/docs/DEVOPS-WORKFLOW.md"
     "$HARNESS_ROOT/templates/cli-prompts/architecture-rules.txt"
     "$HARNESS_ROOT/templates/cli-prompts/spec-decomposition.txt"

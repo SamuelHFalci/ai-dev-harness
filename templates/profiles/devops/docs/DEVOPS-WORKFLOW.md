@@ -26,6 +26,13 @@ Replace “unit tests” with **what your team trusts before merge/apply**, for 
 
 Per-change artifacts can still live under **`specs/{change-id}/`** (e.g. `plan.md`, `tasks.md`, `qa-report.md`) even when the “implementation” is mostly HCL/YAML and pipelines.
 
-## Runner
+## Runners
 
-Use **`.ai-harness/prompts/run-devops-cycle.md`** as the primary autonomous loop (see `.ai-harness/cursor-rule.mdc`).
+| Prompt | Use when |
+|--------|----------|
+| `run-devops-cycle-lite.md` | **Default.** Isolated change, single module, pipeline fix, variable/tag update. Low blast radius. |
+| `run-devops-cycle-deep.md` | New environment, new module from scratch, architecture change, multi-service infra, breaking change. |
+| `run-devops-cycle.md` | Legacy monolithic runner — kept for compatibility. |
+| `run-resume.md` | Session interrupted mid-change — resumes from exact stopping point. |
+
+> **Rule of thumb:** if the change touches shared platform components (VPC, IAM, state backend, CI runners) or introduces a new environment → Deep. Everything else → Lite.

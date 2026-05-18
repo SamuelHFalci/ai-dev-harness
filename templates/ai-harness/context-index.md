@@ -21,7 +21,9 @@ Read this file first. Then load only what the current task requires.
 | `prompts/run-resume.md` | session interrupted — resume from where it stopped |
 | `prompts/run-validation-only.md` | verify existing implementation without replanning |
 | `prompts/run-docs-to-implementation.md` | translate spec/doc directly into code |
-| `prompts/run-devops-cycle.md` | DevOps/IaC profile (`profile` = `devops`) |
+| `prompts/run-devops-cycle-lite.md` | DevOps/IaC — isolated change, low blast radius (default) |
+| `prompts/run-devops-cycle-deep.md` | DevOps/IaC — new environment, architecture change |
+| `prompts/run-devops-cycle.md` | DevOps/IaC — legacy monolithic runner |
 
 ## Documentation (load on demand — grep first)
 
