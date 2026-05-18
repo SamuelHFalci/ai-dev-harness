@@ -1,0 +1,162 @@
+---
+description: Project architecture — Ansible (example based on pmz-ansible conventions)
+globs: []
+alwaysApply: true
+---
+
+<!-- EXAMPLE FILE — copy to .ai-harness/architecture-rules.mdc and adapt to your project.
+     Replace placeholders with real paths and group names from your inventory.
+     Remove this comment when done. -->
+
+# Project Architecture — Ansible
+
+## Principles
+
+- Single inventory file while managing one environment group; expand to `inventory/<env>/` only when adding multiple environments.
+- All modules referenced by FQCN (`ansible.builtin.*`, `community.*`). Never use short names.
+- No hardcoded credentials anywhere in the repo — secrets via Ansible Vault or runtime prompts.
+- Roles for any logic used by more than one playbook. Flat tasks in playbook for one-off or bootstrap work.
+- `become: true` is set globally in `ansible.cfg`; do not repeat it in every task unless explicitly overriding.
+
+## Project structure
+
+```
+.
+├── ansible.cfg              # global config — source of truth for paths and defaults
+├── inventory                # single INI file (expand to inventory/<env>/ when multi-env)
+├── group_vars/              # group-level variables (create when inventory grows)
+│   └── <group>.yml
+├── host_vars/               # host-level overrides (create when needed)
+│   └── <hostname>.yml
+├── roles/                   # reusable roles (configured in ansible.cfg: roles_path = ./roles)
+│   └── <role-name>/
+│       ├── tasks/
+│       │   └── main.yml     # entry point — import_tasks for subtasks
+│       ├── handlers/
+│       │   └── main.yml
+│       ├── defaults/        # low-priority defaults — always define vars here first
+│       │   └── main.yml
+│       ├── vars/            # high-priority vars — use sparingly
+│       │   └── main.yml
+│       ├── templates/       # Jinja2 templates (.j2)
+│       ├── files/           # static files
+│       └── meta/
+│           └── main.yml     # role dependencies and Galaxy metadata
+├── collections/             # installed collections (gitignored; installed via requirements.yml)
+├── playbook.yml             # main playbook (or playbooks/<name>.yml when multiple)
+└── requirements.yml         # Galaxy roles and collections (create when using external content)
+```
+
+## ansible.cfg conventions (do not change without documenting the reason)
+
+```ini
+[defaults]
+inventory = ./inventory
+stdout_callback = yaml          # human-readable output
+retry_files_enabled = False
+interpreter_python = auto_silent
+roles_path = ./roles
+collections_paths = ./collections
+
+[privilege_escalation]
+become = True
+become_method = sudo
+become_ask_pass = False         # password provided at runtime via -K or vault
+
+[ssh_connection]
+pipelining = True               # performance — requires requiretty disabled on targets
+```
+
+## Decision tree
+
+IF task involves a new playbook:
+  → Target an existing inventory group (`hosts: <group>`)
+  → One play per logical concern — do not mix unrelated roles in one play
+  → If playbook will be run standalone more than once: move to `playbooks/<name>.yml`
+  → Pattern anchor: `playbook.yml`
+
+IF task involves repeated logic (used in >1 playbook):
+  READ .ai-harness/architecture/ROLE-CONVENTIONS.md
+  → Create role under `roles/<role-name>/`
+  → Entry point: `tasks/main.yml` — use `import_tasks:` for subtask files
+  → Variables: defaults in `defaults/main.yml` (overridable); constants in `vars/main.yml`
+  → All templates in `templates/` with `.j2` extension
+  → Pattern anchor: `roles/<existing-role>/`
+
+IF task involves host or group variables:
+  READ .ai-harness/architecture/VARIABLES.md
+  → Group vars: `group_vars/<group>.yml` (create if not exists)
+  → Host vars: `host_vars/<hostname>.yml` (for host-specific overrides only)
+  → Variable naming: `snake_case`, prefixed with role name for role vars (e.g. `nginx_port`)
+  → Never define the same variable in both `group_vars/` and `defaults/main.yml` — pick one
+
+IF task involves secrets (passwords, tokens, keys):
+  READ .ai-harness/architecture/SECRETS.md
+  → Encrypt with `ansible-vault encrypt_string` or vault files
+  → Vault password file: `.vault_pass` (gitignored — never commit)
+  → Reference in ansible.cfg: `vault_password_file = .vault_pass`
+  → Never hardcode secrets in inventory, vars files, or playbooks
+  → Prefix encrypted vars with `vault_` to make them identifiable
+
+IF task involves external roles or collections:
+  → Add to `requirements.yml` under `roles:` or `collections:`
+  → Install with: `ansible-galaxy install -r requirements.yml`
+  → `collections/` is gitignored — always install from `requirements.yml`
+  → Pin versions in `requirements.yml` to avoid unexpected upgrades
+
+IF task involves adding a new environment (dev/staging/prod):
+  READ .ai-harness/architecture/INVENTORY.md
+  → Convert `inventory` file to `inventory/` directory
+  → Structure: `inventory/<env>/hosts.ini` + `inventory/<env>/group_vars/`
+  → Common vars: `group_vars/all.yml`; env-specific: `group_vars/<env>.yml`
+  → Update `ansible.cfg`: `inventory = ./inventory/<env>` or pass `-i inventory/<env>` at runtime
+
+IF task involves CI/CD (automated runs):
+  READ .ai-harness/architecture/PIPELINE.md
+  → Lint gate: `ansible-lint` must pass before merge
+  → Syntax check: `ansible-playbook --syntax-check playbook.yml`
+  → Dry-run (check mode): `ansible-playbook --check --diff playbook.yml`
+  → Never run apply (`ansible-playbook` without `--check`) autonomously — stop and present diff for human approval
+
+## Pattern anchor files
+
+| Pattern | Canonical file |
+|---------|---------------|
+| Playbook structure | `playbook.yml` |
+| Role task entry | `roles/<role>/tasks/main.yml` |
+| Role defaults | `roles/<role>/defaults/main.yml` |
+| Group variables | `group_vars/<group>.yml` |
+| Inventory | `inventory` (or `inventory/<env>/hosts.ini` when multi-env) |
+
+## Variable naming conventions
+
+| Type | Convention | Example |
+|------|-----------|---------|
+| Ansible built-in | `ansible_*` | `ansible_user`, `ansible_host` |
+| Ansible facts | `ansible_*` | `ansible_distribution` |
+| Role variables | `<role>_<name>` | `nginx_port`, `nginx_user` |
+| Vault-encrypted | `vault_<name>` | `vault_db_password` |
+| Playbook-scoped | `snake_case` | `app_version` |
+
+## Auth model
+
+- SSH: username + password via runtime prompts (`--ask-pass` / `-k`) or Vault
+- Sudo: `become = True` globally; password via `--ask-become-pass` / `-K` or Vault
+- Requires `sshpass` installed on the controller for password-based SSH
+- Target hosts: Debian/Ubuntu with `python3` at `/usr/bin/python3`
+
+## Implementation safety rules
+
+- Never run `ansible-playbook` without `--check --diff` first — always review the diff before applying.
+- Never commit `.vault_pass`, `*.vault_pass`, or any file containing plaintext credentials.
+- Never use `ignore_errors: true` without documenting why in a comment on the same task.
+- Never use `shell:` or `command:` when an idempotent module exists for the same operation.
+- Always use FQCN for modules: `ansible.builtin.copy`, not `copy`.
+
+## Testing and quality gates
+
+- Lint: `ansible-lint` — zero warnings before any PR
+- Syntax check: `ansible-playbook --syntax-check <playbook>.yml`
+- Dry-run: `ansible-playbook --check --diff <playbook>.yml` against a non-prod target
+- Molecule: `molecule test` — required for any role that will be reused across projects
+- All gates must pass before `READY_FOR_PR: yes`
