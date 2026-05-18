@@ -49,11 +49,12 @@ If `architecture_bootstrap_done` is `false` OR `architecture-rules.mdc` contains
 
 For DevOps bootstrap, `architecture-rules.mdc` must cover:
 - Environments and promotion path (dev → staging → prod)
-- State backend and workspace conventions
-- Module hierarchy and boundaries
-- Secrets handling (approved stores, no plaintext in Git)
+- Stack-specific: state backend and workspace conventions (Terraform) | inventory structure (Ansible) | cluster/namespace conventions (Kubernetes)
+- Module/role/chart hierarchy and boundaries
+- Secrets handling (approved stores, no plaintext in Git; vault pattern for the stack)
 - Naming and tagging standards
-- Change safety: plan → review → apply sequence; rollback procedures
+- Change safety: dry-run → review → apply sequence; rollback procedures
+- Testing and quality gates: exact commands for format, validate, dry-run, policy scan
 
 ---
 
@@ -100,7 +101,7 @@ INIT
 | SPEC_REVIEWER | verify change is scoped, safe, and has rollback | `spec-review.json` |
 | PLAN_REVIEWER | verify task order, blast radius, state safety | `plan-review.json` |
 | TASK_REVIEWER | verify tasks are atomic and target real files | `task-review.json` |
-| IMPLEMENTER | write IaC code; run fmt and validate per task | code + plan output |
+| IMPLEMENTER | write IaC/config code; run stack's format + validate per task | code + dry-run output |
 | QA | run all validation gates; present plan summary | `qa-report.md` |
 | CODE_REVIEWER | security, blast radius, idempotency, rollback | `code-review.md` |
 
@@ -110,11 +111,13 @@ Reviews are checklists. CHANGES_REQUESTED → fix → re-check. No prose debates
 
 ## DevOps-Specific Safety Rules
 
-**Never apply autonomously.** After `terraform plan` (or equivalent):
-- Present plan output: resources to add/change/destroy.
-- Flag any unexpected destroys as BLOCKER.
+**Never apply autonomously.** After the stack's dry-run (e.g. `terraform plan`, `ansible-playbook --check --diff`, `helm template | kubectl diff`):
+- Present the dry-run output: what would be added / changed / removed.
+- Flag any unexpected removals or destructive changes as BLOCKER.
 - Write `runtime/human-needed.md` requesting apply approval.
-- Stop. Human approves before any `apply` runs.
+- Stop. Human approves before any apply/execute runs.
+
+Quality gate commands come from `architecture-rules.mdc` → "Testing and quality gates". Never hardcode stack-specific commands in this prompt.
 
 **State safety:**
 - Confirm state locking is active before any multi-task implementation session.

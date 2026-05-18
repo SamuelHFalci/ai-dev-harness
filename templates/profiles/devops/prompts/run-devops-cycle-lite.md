@@ -97,37 +97,40 @@ IaC rules:
 
 Run `prompts/modes/qa-mode.md` → write `specs/{id}/qa-report.md`.
 
-DevOps quality gates (run all that apply to the stack):
+Read `.cursor/rules/architecture-rules.mdc` → section "Testing and quality gates" defines the exact commands for this stack.
 
-```
-terraform fmt -check          # or tofu fmt -check
-terraform validate            # or tofu validate
-terraform plan -out=tfplan    # or tofu plan — review for unexpected destroys
-<policy scanner>              # tfsec / Checkov / Conftest / Sentinel
-helm template | kubectl diff  # if applicable
-pipeline dry-run              # if applicable
-```
+Run every command listed there. Common examples by stack:
+
+| Stack | Format | Validate | Dry-run |
+|-------|--------|----------|---------|
+| Terraform/OpenTofu | `terraform fmt -check` | `terraform validate` | `terraform plan` |
+| Ansible | `yamllint .` + `ansible-lint` | `ansible-playbook --syntax-check` | `ansible-playbook --check --diff` |
+| Kubernetes/Helm | — | `kubectl --dry-run=client` | `helm template \| kubectl diff` |
+| Pulumi | — | `pulumi preview` | `pulumi preview --diff` |
+
+If `architecture-rules.mdc` does not define quality gate commands: stop and write `runtime/human-needed.md` — do not guess.
 
 **qa-report.md format:**
 ```yaml
 spec_id: <id>
 date: <YYYY-MM-DD>
+stack: terraform | ansible | kubernetes | other
 commands_run:
   - command: <exact command>
     result: PASS | FAIL
     output_summary: <key lines>
-plan_summary:
+dry_run_summary:
   add: <N>
   change: <N>
-  destroy: <N>
-unexpected_destroys: yes | no — <list if yes>
+  destroy: <N>           # rename to "remove" for non-Terraform stacks
+unexpected_removals: yes | no — <list if yes>
 acceptance_criteria:
   - criterion: <text>
     status: MET | UNMET
 verdict: PASS | FAIL
 ```
 
-If `unexpected_destroys: yes` or any command FAIL → stop, write `runtime/human-needed.md`, do not apply.
+If `unexpected_removals: yes` or any command FAIL → stop, write `runtime/human-needed.md`, do not apply.
 
 ---
 
@@ -136,13 +139,13 @@ If `unexpected_destroys: yes` or any command FAIL → stop, write `runtime/human
 Run `prompts/modes/code-review-mode.md` → write `specs/{id}/code-review.md`.
 
 DevOps-specific checklist additions:
-- [ ] No plaintext secrets in any `.tf`, `.yaml`, or pipeline file
-- [ ] State locking configured — no risk of concurrent apply
-- [ ] Change is idempotent — re-applying produces no diff
+- [ ] No plaintext secrets in any committed file (`.tf`, `.yml`, `.yaml`, pipeline files)
+- [ ] Change is idempotent — re-applying/re-running produces no diff (critical for Ansible; no unexpected destroys for Terraform)
 - [ ] Blast radius is accurately stated and acceptable
 - [ ] Rollback path is documented and feasible
-- [ ] Least-privilege: no resources granted wider permissions than needed
+- [ ] Least-privilege: no resource granted wider permissions than needed
 - [ ] Naming and tagging follow `architecture-rules.mdc` conventions
+- [ ] Stack-specific: state locking (Terraform) | `changed_when` on shell tasks (Ansible) | dry-run verified (all stacks)
 
 ---
 
